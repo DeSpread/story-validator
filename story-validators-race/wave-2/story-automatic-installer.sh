@@ -26,10 +26,10 @@ display_dashboard_menu() {
 
     echo "Story Node Dashboard by DeSpread."
     echo "1. Install Story Node"
-    echo "2. Check Logs"
-    echo "3. Check Sync Status"
-    echo "4. Upgrade Node"
-    echo "5. Check Version"
+    echo "2. Upgrade Node"
+    echo "3. Check Version"
+    echo "4. Check Sync Status"
+    echo "5. Check Logs"
     echo "6. Quit"
     echo ""
     echo -n "Please enter your choice: "
@@ -406,10 +406,10 @@ while true; do
     read choice
     case $choice in
         1) install_story_node ;;
-        2) check_logs ;;
-        3) check_sync_status ;;
-        4) upgrade_node ;;
-        5) check_version ;;
+        2) upgrade_node ;;
+        3) check_version ;;
+        4) check_sync_status ;;
+        5) check_logs ;;
         6)
           echo "Exiting the dashboard."
           exit 0
