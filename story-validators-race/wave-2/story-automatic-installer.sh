@@ -213,7 +213,7 @@ check_sync_status() {
     trap 'return' INT
     while true; do
         local_height=$(curl -s localhost:26657/status | jq -r '.result.sync_info.latest_block_height')
-        network_height=$(curl -s https://story-testnet-rpc.blockhub.id/status | jq -r '.result.sync_info.latest_block_height')
+        network_height=$(curl -s https://story-testnet-rpc.polkachu.com/status | jq -r '.result.sync_info.latest_block_height')
         blocks_left=$((network_height - local_height))
 
         printf "\033[1;32mYour node height:\033[0m \033[1;34m$local_height\033[0m | \033[1;33mNetwork height:\033[0m \033[1;36m$network_height\033[0m | \033[1;37mBlocks left:\033[0m \033[1;31m$blocks_left\033[0m\n"
