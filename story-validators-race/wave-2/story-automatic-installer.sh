@@ -76,17 +76,26 @@ install_cosmovisor() {
     . $HOME/.bash_profile
 }
 
-# Initialize The Iliad Network Node
-setup_systemd_services() {
-    read -p "Enter your node moniker: " moniker
-    $HOME/.story/story/cosmovisor/genesis/bin/story init --network iliad --moniker "$moniker"
-}
-
 # Update node peers
 update_node_peers() {
-    PEERS=$(curl -sS https://story-testnet-rpc.blockhub.id/net_info | jq -r '.result.peers[] | "\(.node_info.id)@\(.remote_ip):\(.node_info.listen_addr)"' | awk -F ':' '{print $1":"$(NF)}' | paste -sd, -)
-    echo "Updating peers of story node"
-    sed -i.bak -e "s/^persistent_peers *=.*/persistent_peers = \"$PEERS\"/" $HOME/.story/story/config/config.toml
+  echo "Update peers in progress..."
+  PEERS=$(curl -sS https://snapshotstory.shablya.io/net_info |
+    jq -r '.result.peers[] | select(.node_info.id != null and .remote_ip != null and .node_info.listen_addr != null) |
+    "\(.node_info.id)@\(if .node_info.listen_addr | contains("0.0.0.0") then .remote_ip + ":" + (.node_info.listen_addr | sub("tcp://0.0.0.0:"; "")) else (.node_info.listen_addr | sub("tcp://"; "")) end)"' |
+    paste -sd ',')
+
+    PEERS="\"$PEERS\""
+
+    if [ -n "$PEERS" ]; then
+        sed -i "s/^persistent_peers *=.*/persistent_peers = $PEERS/" "$HOME/.story/story/config/config.toml"
+        if [ $? -eq 0 ]; then
+            echo -e "Configuration file updated successfully with new peers"
+        else
+            echo "Failed to update configuration file."
+        fi
+    else
+        echo "No peers found to update."
+    fi
 }
 
 # Set up systemd services
@@ -141,6 +150,7 @@ EOF
 
 # Install the Story Node
 install_story_node() {
+    read -p "Enter your node moniker: " moniker
     install_required_packages
     install_go
     install_story_geth
@@ -148,6 +158,7 @@ install_story_node() {
     install_cosmovisor
     update_node_peers
     setup_systemd_services
+    $HOME/.story/story/cosmovisor/genesis/bin/story init --network iliad --moniker "$moniker"
 
     while true; do
         echo -e "\nWhat would you like to do next?"
