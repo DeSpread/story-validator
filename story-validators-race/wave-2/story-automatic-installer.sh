@@ -3,13 +3,26 @@
 # Global setting variables, typically uppercase
 export GO_VERSION="1.23.2"
 
-export COSMOVISOR_VERSION="v1.5.0"
+export COSMOVISOR_VERSION="v1.6.0"
+
 export INIT_STORY_GETH_VERSION="0.9.3-b224fdf"
 export INIT_STORY_VERSION="0.9.13-b4c7db1"
 
-# Local usage variables, no need to export if only used within the script
-_aws_geth_binary_url="https://story-geth-binaries.s3.us-west-1.amazonaws.com/geth-public/geth-linux-amd64-$INIT_STORY_GETH_VERSION.tar.gz"
-_aws_story_binary_url="https://story-geth-binaries.s3.us-west-1.amazonaws.com/story-public/story-linux-amd64-$INIT_STORY_VERSION.tar.gz"
+export SECOND_STORY_UPGRADE_NAME="v0.10.0"
+export SECOND_STORY_VERSION="0.10.0-9603826"
+export SECOND_STORY_VERSION_UP_BLOCK_HEIGHT=626575
+
+# Function to get AWS Geth binary URL
+get_aws_geth_binary_url() {
+    local geth_version="$1"
+    echo "https://story-geth-binaries.s3.us-west-1.amazonaws.com/geth-public/geth-linux-amd64-${geth_version}.tar.gz"
+}
+
+# Function to get AWS Story binary URL
+get_aws_story_binary_url() {
+    local story_version="$1"
+    echo "https://story-geth-binaries.s3.us-west-1.amazonaws.com/story-public/story-linux-amd64-${story_version}.tar.gz"
+}
 
 display_logo() {
   echo " ▗▄▄▄ ▗▄▄▄▖ ▗▄▄▖▗▄▄▖ ▗▄▄▖ ▗▄▄▄▖ ▗▄▖ ▗▄▄▄ "
@@ -55,7 +68,7 @@ install_go() {
 
 # Download and Install Story-Geth Binary
 install_story_geth() {
-    wget -q $_aws_geth_binary_url -O /tmp/geth-linux-amd64-$INIT_STORY_GETH_VERSION.tar.gz
+    wget -q $(get_aws_geth_binary_url "$INIT_STORY_GETH_VERSION") -O /tmp/geth-linux-amd64-$INIT_STORY_GETH_VERSION.tar.gz
     tar -xzf /tmp/geth-linux-amd64-$INIT_STORY_GETH_VERSION.tar.gz -C /tmp
     mkdir -p $HOME/go/bin
     sudo cp /tmp/geth-linux-amd64-$INIT_STORY_GETH_VERSION/geth $HOME/go/bin/story-geth
@@ -63,7 +76,7 @@ install_story_geth() {
 
 # Download and Install Story Binary using Cosmovisor
 install_story_binary() {
-    wget -q $_aws_story_binary_url -O /tmp/story-linux-amd64-$INIT_STORY_VERSION.tar.gz
+    wget -q $(get_aws_story_binary_url "$INIT_STORY_VERSION") -O /tmp/story-linux-amd64-$INIT_STORY_VERSION.tar.gz
     tar -xzf /tmp/story-linux-amd64-$INIT_STORY_VERSION.tar.gz -C /tmp
     mkdir -p $HOME/.story/story/cosmovisor/genesis/bin
     sudo cp /tmp/story-linux-amd64-$INIT_STORY_VERSION/story $HOME/.story/story/cosmovisor/genesis/bin/story
@@ -74,8 +87,10 @@ install_cosmovisor() {
     go install cosmossdk.io/tools/cosmovisor/cmd/cosmovisor@$COSMOVISOR_VERSION
 
     mkdir -p $HOME/.story/story/cosmovisor
+    mkdir -p $HOME/.story/story/backup
     echo "export DAEMON_NAME=story" >> $HOME/.bash_profile
     echo "export DAEMON_HOME=$HOME/.story/story" >> $HOME/.bash_profile
+    echo "export DAEMON_DATA_BACKUP_DIR=$HOME/.story/story/backup" >> $HOME/.bash_profile
     echo "export PATH=$HOME/go/bin:$DAEMON_HOME/cosmovisor/current/bin:$PATH" >> $HOME/.bash_profile
     . $HOME/.bash_profile
 }
@@ -89,7 +104,7 @@ update_node_peers() {
     paste -sd ',')
 
     PEERS="\"$PEERS\""
-    echo "Successfully found peers: $PEERS"
+    echo "Node peers has been successfully updated. peers: $PEERS"
 
     if [ -n "$PEERS" ]; then
         sed -i "s/^persistent_peers *=.*/persistent_peers = $PEERS/" "$HOME/.story/story/config/config.toml"
@@ -150,20 +165,38 @@ EOF
     sudo systemctl enable story-geth story
     sudo systemctl start story-geth story
 
-    echo -e "\nStory Node has been successfully installed."
+    echo "Story node system daemon setup has been successfully completed."
+}
+
+schedule_second_client_upgrade() {
+  schedule_client_upgrade $(get_aws_story_binary_url "$SECOND_STORY_VERSION") $SECOND_STORY_UPGRADE_NAME $SECOND_STORY_VERSION_UP_BLOCK_HEIGHT
 }
 
 # Install the Story Node
 install_story_node() {
     read -p "Enter your node moniker: " moniker
+
     install_required_packages
     install_go
     install_story_geth
     install_story_binary
     install_cosmovisor
+
+    # Initialize Story node
     $HOME/.story/story/cosmovisor/genesis/bin/story init --network iliad --moniker "$moniker"
+
+    # Initialize Cosmovisor
+    cosmovisor init $HOME/.story/story/cosmovisor/genesis/bin/story
+    cosmovisor version
+    echo "Cosmovisor has been successfully installed"
+
     update_node_peers
     setup_systemd_services
+
+    echo "Story Node has been successfully installed."
+
+    schedule_second_client_upgrade
+    echo "Next Story node upgrade successfully scheduled. Upgrade name: $SECOND_STORY_UPGRADE_NAME"
 
     while true; do
         echo -e "\nWhat would you like to do next?"
@@ -238,16 +271,15 @@ upgrade_menu() {
 
 # Schedule an upgrade to the Story client
 schedule_client_upgrade() {
+    # Parameters for the function
+    local upgrade_link="$1"
+    local client_version="$2"
+    local upgrade_height="$3"
+
     echo "Schedule an upgrade to the Story client"
-
-    # Input the Client Upgrade link
-    read -p "Enter the link for the client upgrade: " upgrade_link
-
-    # Input Client version
-    read -p "Enter the new version of the client (e.g. v0.11.0): " client_version
-
-    # Input upgrade Height
-    read -p "Enter upgrade Height: " upgrade_height
+    echo "upgrade_link=$upgrade_link"
+    echo "client_version=$client_version"
+    echo "upgrade_height=$upgrade_height"
 
     # Create a temporary directory for the download
     temp_dir=$(mktemp -d)
@@ -271,96 +303,19 @@ schedule_client_upgrade() {
     client_path=$(readlink -f "$client_executable")
 
     # Run the command to schedule the upgrade
-    echo "Scheduling the upgrade to the new client."
-    cosmovisor add-upgrade "$client_version" "$client_path" --force --upgrade-height "$upgrade_height"
+    if [ "$upgrade_height" -eq 0 ]; then
+      echo "Immediately upgrade to the new client."
+      cosmovisor add-upgrade "$client_version" "$client_path" --force
+    else
+      echo "Scheduling the upgrade to the new client."
+      cosmovisor add-upgrade "$client_version" "$client_path" --force --upgrade-height "$upgrade_height"
+    fi
 
     # Clean up
     cd - > /dev/null
     rm -rf "$temp_dir"
 
     echo "Upgrade scheduled successfully!"
-
-    # Ask user for next action
-    while true; do
-        echo -e "\nWhat would you like to do next?"
-        echo "1. Back to dashboard menu"
-        echo "2. Quit"
-        read -p "Enter your choice: " post_upgrade_choice
-        case $post_upgrade_choice in
-            1)
-                return
-                ;;
-            2)
-                echo "Exiting the script. Goodbye!"
-                exit 0
-                ;;
-            *)
-                echo "Invalid option. Please try again."
-                ;;
-        esac
-    done
-}
-
-instant_upgrade() {
-    echo -e "\nGet started instant upgrading."
-
-    # Ask for the new client download link
-    read -p "Enter the download link for the new client: " download_link
-
-    # Ask for the new client version
-    read -p "Enter the new version of the client (e.g. v0.11.0): " new_version
-
-    # Create a temporary directory for the download
-    temp_dir=$(mktemp -d)
-    cd "$temp_dir"
-
-    # Download and extract the Client
-    echo "Download and extract the new client in progress..."
-    curl -L "$download_link" | tar -xz
-
-    # Find the client executable
-    client_executable=$(find . -type f -executable | head -n 1)
-
-    if [ -z "$client_executable" ]; then
-        echo "Error: No executable file found in the downloaded archive."
-        cd - > /dev/null
-        rm -rf "$temp_dir"
-        return
-    fi
-
-    # Get the full path of the client executable
-    client_path=$(readlink -f "$client_executable")
-
-    # Run the command to schedule the upgrade
-    echo "Schedule the upgrade in progress..."
-    echo $client_path
-    cosmovisor add-upgrade "$new_version" "$client_path" --force
-
-    # Clean up
-    cd - > /dev/null
-    rm -rf "$temp_dir"
-
-    echo "Successfully upgraded to the new client!"
-
-    # Ask user what to do next
-    while true; do
-        echo -e "\nWhat would you like to do next?"
-        echo "1. Back to main menu"
-        echo "2. Quit"
-        read -p "Enter your choice: " post_upgrade_choice
-        case $post_upgrade_choice in
-            1)
-                return
-                ;;
-            2)
-                echo "Exiting the script."
-                exit 0
-                ;;
-            *)
-                echo "Invalid option. Please try again."
-                ;;
-        esac
-    done
 }
 
 upgrade_node() {
@@ -369,11 +324,58 @@ upgrade_node() {
     read upgrade_choice
     case $upgrade_choice in
         1)
-            schedule_client_upgrade
+            read -p "Enter the link for the client upgrade: " upgrade_link
+            read -p "Enter the new version of the client (e.g. v0.11.0): " client_version
+            read -p "Enter upgrade Height: " upgrade_height
+
+            schedule_client_upgrade "$upgrade_link" "$client_version" "$upgrade_height"
+
+            # Ask user for next action
+            while true; do
+                echo -e "\nWhat would you like to do next?"
+                echo "1. Back to dashboard menu"
+                echo "2. Quit"
+                read -p "Enter your choice: " post_upgrade_choice
+                case $post_upgrade_choice in
+                    1)
+                        return
+                        ;;
+                    2)
+                        echo "Exiting the script. Goodbye!"
+                        exit 0
+                        ;;
+                    *)
+                        echo "Invalid option. Please try again."
+                        ;;
+                esac
+            done
             break
             ;;
         2)
-            instant_upgrade
+            read -p "Enter the link for the client upgrade: " upgrade_link
+            read -p "Enter the new version of the client (e.g. v0.11.0): " client_version
+
+            schedule_client_upgrade "$upgrade_link" "$client_version" 0
+
+            # Ask user for next action
+            while true; do
+                echo -e "\nWhat would you like to do next?"
+                echo "1. Back to dashboard menu"
+                echo "2. Quit"
+                read -p "Enter your choice: " post_upgrade_choice
+                case $post_upgrade_choice in
+                    1)
+                        return
+                        ;;
+                    2)
+                        echo "Exiting the script. Goodbye!"
+                        exit 0
+                        ;;
+                    *)
+                        echo "Invalid option. Please try again."
+                        ;;
+                esac
+            done
             break
             ;;
         3)
