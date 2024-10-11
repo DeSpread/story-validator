@@ -1,5 +1,29 @@
 #!/bin/bash
 
+# Global setting variables, typically uppercase
+# Path to the JSON file
+_UPGRADE_INFO_PATH="$HOME/.story/story/data/upgrade-info.json"
+
+get_aws_story_binary_url() {
+    local story_version="$1"
+    echo "https://story-geth-binaries.s3.us-west-1.amazonaws.com/story-public/story-linux-amd64-${story_version}.tar.gz"
+}
+
+# Function to check if the upgrade has already been done
+check_if_upgrade_already_done() {
+    if [ -f "$_UPGRADE_INFO_PATH" ]; then
+        # Read the upgrade block height from the JSON file
+        _UPGRADE_HEIGHT=$(jq -r '.height' "$_UPGRADE_INFO_PATH")
+
+        # Check if the upgrade block height matches the condition block height
+        if [ "$_UPGRADE_HEIGHT" -eq "$1" ]; then
+            echo "Upgrade already performed at block height $_UPGRADE_HEIGHT. Skipping upgrade."
+            return 0  # Return true if the upgrade was already done
+        fi
+    fi
+    return 1  # Return false if the upgrade was not done
+}
+
 # Schedule an upgrade to the Story client
 schedule_client_upgrade() {
     # Parameters for the function
@@ -57,12 +81,27 @@ while true; do
     echo "Current block height: $LATEST_BLOCK_HEIGHT"
 
     # Check if current block has reached destination block
-    # Upgrade the node: v0.10.x -> v0.11.0
-    if [ "$LATEST_BLOCK_HEIGHT" -ge 626575 ]; then
-        echo "Block height $LATEST_BLOCK_HEIGHT has reached $TARGET_BLOCK_HEIGHT. Start to upgrade node to the new client."
+    # Upgrade the node: v0.9.13 -> v0.10.1
+    if [ "$LATEST_BLOCK_HEIGHT" -ge 1 ]; then
 
-        schedule_client_upgrade "https://story-geth-binaries.s3.us-west-1.amazonaws.com/story-public/story-linux-amd64-0.11.0-aac4bfe.tar.gz" "v0.11.0" 1325860
-        break
+      # Check if the upgrade has already been performed
+      if check_if_upgrade_already_done 626575; then
+          echo "No need to perform the upgrade again."
+      else
+        echo "Block height $LATEST_BLOCK_HEIGHT has reached 1."
+        schedule_client_upgrade "$(get_aws_story_binary_url "0.10.0-9603826")" "v0.10.0" 626575
+      fi
+
+    # Upgrade the node: v0.10 -> v0.11.0
+    elif [ "$LATEST_BLOCK_HEIGHT" -ge 626575 ]; then
+
+      # Check if the upgrade has already been performed
+      if check_if_upgrade_already_done 1325860; then
+          echo "No need to perform the upgrade again."
+      else
+        echo "Block height $LATEST_BLOCK_HEIGHT has reached 626575."
+        schedule_client_upgrade "$(get_aws_story_binary_url "0.11.0-aac4bfe")" "v0.11.0" 1325860
+      fi
     fi
 
     sleep 5
