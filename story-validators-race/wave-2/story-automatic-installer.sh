@@ -3,9 +3,13 @@
 # Global setting variables, typically uppercase
 export GO_VERSION="1.23.2"
 
+export COSMOVISOR_VERSION="v1.5.0"
+export INIT_STORY_GETH_VERSION="0.9.3-b224fdf"
+export INIT_STORY_VERSION="0.9.13-b4c7db1"
+
 # Local usage variables, no need to export if only used within the script
-_aws_geth_binary_url="https://story-geth-binaries.s3.us-west-1.amazonaws.com/geth-public/geth-linux-amd64-0.9.3-b224fdf.tar.gz"
-_aws_story_binary_url="https://story-geth-binaries.s3.us-west-1.amazonaws.com/story-public/story-linux-amd64-0.11.0-aac4bfe.tar.gz"
+_aws_geth_binary_url="https://story-geth-binaries.s3.us-west-1.amazonaws.com/geth-public/geth-linux-amd64-$INIT_STORY_GETH_VERSION.tar.gz"
+_aws_story_binary_url="https://story-geth-binaries.s3.us-west-1.amazonaws.com/story-public/story-linux-amd64-$INIT_STORY_VERSION.tar.gz"
 
 display_logo() {
   echo " ▗▄▄▄ ▗▄▄▄▖ ▗▄▄▖▗▄▄▖ ▗▄▄▖ ▗▄▄▄▖ ▗▄▖ ▗▄▄▄ "
@@ -13,9 +17,9 @@ display_logo() {
   echo " ▐▌  █▐▛▀▀▘ ▝▀▚▖▐▛▀▘ ▐▛▀▚▖▐▛▀▀▘▐▛▀▜▌▐▌  █"
   echo " ▐▙▄▄▀▐▙▄▄▖▗▄▄▞▘▐▌   ▐▌ ▐▌▐▙▄▄▖▐▌ ▐▌▐▙▄▄▀"
   echo ""
-  echo "* Website: https://despread.io"
-  echo "* Twitter: https://x.com/despreadteam"
-  echo "* Github: https://github.com/DeSpread"
+  echo "- Website: https://despread.io"
+  echo "- Twitter: https://x.com/despreadteam"
+  echo "- Github: https://github.com/DeSpread"
   echo ""
 }
 
@@ -51,23 +55,23 @@ install_go() {
 
 # Download and Install Story-Geth Binary
 install_story_geth() {
-    wget -q $_aws_geth_binary_url -O /tmp/geth-linux-amd64-0.9.3-b224fdf.tar.gz
-    tar -xzf /tmp/geth-linux-amd64-0.9.3-b224fdf.tar.gz -C /tmp
+    wget -q $_aws_geth_binary_url -O /tmp/geth-linux-amd64-$INIT_STORY_GETH_VERSION.tar.gz
+    tar -xzf /tmp/geth-linux-amd64-$INIT_STORY_GETH_VERSION.tar.gz -C /tmp
     mkdir -p $HOME/go/bin
-    sudo cp /tmp/geth-linux-amd64-0.9.3-b224fdf/geth $HOME/go/bin/story-geth
+    sudo cp /tmp/geth-linux-amd64-$INIT_STORY_GETH_VERSION/geth $HOME/go/bin/story-geth
 }
 
 # Download and Install Story Binary using Cosmovisor
 install_story_binary() {
-    wget -q $_aws_story_binary_url -O /tmp/story-linux-amd64-0.11.0-aac4bfe.tar.gz
-    tar -xzf /tmp/story-linux-amd64-0.11.0-aac4bfe.tar.gz -C /tmp
+    wget -q $_aws_story_binary_url -O /tmp/story-linux-amd64-$INIT_STORY_VERSION.tar.gz
+    tar -xzf /tmp/story-linux-amd64-$INIT_STORY_VERSION.tar.gz -C /tmp
     mkdir -p $HOME/.story/story/cosmovisor/genesis/bin
-    sudo cp /tmp/story-linux-amd64-0.11.0-aac4bfe/story $HOME/.story/story/cosmovisor/genesis/bin/story
+    sudo cp /tmp/story-linux-amd64-$INIT_STORY_VERSION/story $HOME/.story/story/cosmovisor/genesis/bin/story
 }
 
 # Install and setup Cosmovisor
 install_cosmovisor() {
-    go install cosmossdk.io/tools/cosmovisor/cmd/cosmovisor@latest
+    go install cosmossdk.io/tools/cosmovisor/cmd/cosmovisor@$COSMOVISOR_VERSION
 
     mkdir -p $HOME/.story/story/cosmovisor
     echo "export DAEMON_NAME=story" >> $HOME/.bash_profile
@@ -79,12 +83,13 @@ install_cosmovisor() {
 # Update node peers
 update_node_peers() {
   echo "Update peers in progress..."
-  PEERS=$(curl -sS https://snapshotstory.shablya.io/net_info |
+  PEERS=$(curl -sS https://story-testnet-rpc.polkachu.com/net_info |
     jq -r '.result.peers[] | select(.node_info.id != null and .remote_ip != null and .node_info.listen_addr != null) |
     "\(.node_info.id)@\(if .node_info.listen_addr | contains("0.0.0.0") then .remote_ip + ":" + (.node_info.listen_addr | sub("tcp://0.0.0.0:"; "")) else (.node_info.listen_addr | sub("tcp://"; "")) end)"' |
     paste -sd ',')
 
     PEERS="\"$PEERS\""
+    echo "Successfully found peers: $PEERS"
 
     if [ -n "$PEERS" ]; then
         sed -i "s/^persistent_peers *=.*/persistent_peers = $PEERS/" "$HOME/.story/story/config/config.toml"
@@ -156,9 +161,9 @@ install_story_node() {
     install_story_geth
     install_story_binary
     install_cosmovisor
+    $HOME/.story/story/cosmovisor/genesis/bin/story init --network iliad --moniker "$moniker"
     update_node_peers
     setup_systemd_services
-    $HOME/.story/story/cosmovisor/genesis/bin/story init --network iliad --moniker "$moniker"
 
     while true; do
         echo -e "\nWhat would you like to do next?"
