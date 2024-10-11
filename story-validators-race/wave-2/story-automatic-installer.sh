@@ -3,14 +3,17 @@
 # Global setting variables, typically uppercase
 export GO_VERSION="1.23.2"
 
-export COSMOVISOR_VERSION="v1.6.0"
+_COSMOVISOR_VERSION="v1.6.0"
 
-export INIT_STORY_GETH_VERSION="0.9.3-b224fdf"
-export INIT_STORY_VERSION="0.9.13-b4c7db1"
+_INIT_STORY_GETH_VERSION="0.9.3-b224fdf"
+_INIT_STORY_VERSION="0.9.13-b4c7db1"
 
-export SECOND_STORY_UPGRADE_NAME="v0.10.0"
-export SECOND_STORY_VERSION="0.10.0-9603826"
-export SECOND_STORY_VERSION_UP_BLOCK_HEIGHT=626575
+# URL of the update script to download
+_UPDATE_SCRIPT_URL="https://raw.githubusercontent.com/DeSpread/story-validator/refs/heads/main/story-validators-race/wave-2/story-automatic-update.sh"
+# Path to save the update script
+_UPDATE_SCRIPT_PATH="/usr/local/bin/story-automatic-update.sh"
+# Path for the systemd update service file
+_UPDATE_SERVICE_PATH="/etc/systemd/system/story-update.service"
 
 # Function to get AWS Geth binary URL
 get_aws_geth_binary_url() {
@@ -68,23 +71,23 @@ install_go() {
 
 # Download and Install Story-Geth Binary
 install_story_geth() {
-    wget -q $(get_aws_geth_binary_url "$INIT_STORY_GETH_VERSION") -O /tmp/geth-linux-amd64-$INIT_STORY_GETH_VERSION.tar.gz
-    tar -xzf /tmp/geth-linux-amd64-$INIT_STORY_GETH_VERSION.tar.gz -C /tmp
+    wget -q $(get_aws_geth_binary_url "$_INIT_STORY_GETH_VERSION") -O /tmp/geth-linux-amd64-$_INIT_STORY_GETH_VERSION.tar.gz
+    tar -xzf /tmp/geth-linux-amd64-$_INIT_STORY_GETH_VERSION.tar.gz -C /tmp
     mkdir -p $HOME/go/bin
-    sudo cp /tmp/geth-linux-amd64-$INIT_STORY_GETH_VERSION/geth $HOME/go/bin/story-geth
+    sudo cp /tmp/geth-linux-amd64-$_INIT_STORY_GETH_VERSION/geth $HOME/go/bin/story-geth
 }
 
 # Download and Install Story Binary using Cosmovisor
 install_story_binary() {
-    wget -q $(get_aws_story_binary_url "$INIT_STORY_VERSION") -O /tmp/story-linux-amd64-$INIT_STORY_VERSION.tar.gz
-    tar -xzf /tmp/story-linux-amd64-$INIT_STORY_VERSION.tar.gz -C /tmp
+    wget -q $(get_aws_story_binary_url "$_INIT_STORY_VERSION") -O /tmp/story-linux-amd64-$_INIT_STORY_VERSION.tar.gz
+    tar -xzf /tmp/story-linux-amd64-$_INIT_STORY_VERSION.tar.gz -C /tmp
     mkdir -p $HOME/.story/story/cosmovisor/genesis/bin
-    sudo cp /tmp/story-linux-amd64-$INIT_STORY_VERSION/story $HOME/.story/story/cosmovisor/genesis/bin/story
+    sudo cp /tmp/story-linux-amd64-$_INIT_STORY_VERSION/story $HOME/.story/story/cosmovisor/genesis/bin/story
 }
 
 # Install and setup Cosmovisor
 install_cosmovisor() {
-    go install cosmossdk.io/tools/cosmovisor/cmd/cosmovisor@$COSMOVISOR_VERSION
+    go install cosmossdk.io/tools/cosmovisor/cmd/cosmovisor@$_COSMOVISOR_VERSION
 
     mkdir -p $HOME/.story/story/cosmovisor
     mkdir -p $HOME/.story/story/backup
@@ -168,8 +171,46 @@ EOF
     echo "Story node system daemon setup has been successfully completed."
 }
 
-schedule_second_client_upgrade() {
-  schedule_client_upgrade $(get_aws_story_binary_url "$SECOND_STORY_VERSION") $SECOND_STORY_UPGRADE_NAME $SECOND_STORY_VERSION_UP_BLOCK_HEIGHT
+setup_update_systemd_service() {
+  # 1. Download the script and install it
+  mkdir -p "/usr/local/bin"
+  echo "Downloading the script from $_UPDATE_SCRIPT_URL..."
+  sudo wget -q $_UPDATE_SCRIPT_URL -O $_UPDATE_SCRIPT_PATH
+
+  # 2. Grant execute permissions to the script
+  echo "Setting execute permission for the script..."
+  sudo chmod +x $_UPDATE_SCRIPT_PATH
+
+  # 3. Create the systemd service file
+  echo "Creating systemd service file..."
+  sudo tee $_UPDATE_SERVICE_PATH > /dev/null << EOF
+[Unit]
+Description=Story Automatic Update Service
+After=network.target
+
+[Service]
+User=$USER
+ExecStart=$_UPDATE_SCRIPT_PATH
+Restart=on-failure
+RestartSec=60
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  # 4. Reload systemd configuration
+  echo "Reloading systemd daemon..."
+  sudo systemctl daemon-reload
+
+  # 5. Enable and start the service
+  echo "Enabling and starting the story-update service..."
+  sudo systemctl enable story-update.service
+  sudo systemctl start story-update.service
+
+  # 6. Check the status
+  echo "Service 'story-update' has been installed and started. Checking the status..."
+  sudo systemctl status story-update.service
 }
 
 # Install the Story Node
@@ -195,8 +236,7 @@ install_story_node() {
 
     echo "Story Node has been successfully installed."
 
-    schedule_second_client_upgrade
-    echo "Next Story node upgrade successfully scheduled. Upgrade name: $SECOND_STORY_UPGRADE_NAME"
+    setup_update_systemd_service
 
     while true; do
         echo -e "\nWhat would you like to do next?"
