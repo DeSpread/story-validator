@@ -236,6 +236,11 @@ install_story_node() {
 
     echo "Story Node has been successfully installed."
 
+    sleep 60
+
+    # First bump to v0.10.0 from genesis version
+    schedule_client_upgrade "$(get_aws_story_binary_url "0.10.0-9603826")" "v0.10.0" 626575
+    # Set up for next bump
     setup_update_systemd_service
 
     while true; do
