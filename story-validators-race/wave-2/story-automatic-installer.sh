@@ -101,7 +101,7 @@ install_cosmovisor() {
 # Update node peers
 update_node_peers() {
   echo "Update peers in progress..."
-  PEERS=$(curl -sS https://story-testnet-rpc.polkachu.com/net_info |
+  PEERS=$(curl -sS http://vn.testnet.story.despreadlabs.io:8010/net_info |
     jq -r '.result.peers[] | select(.node_info.id != null and .remote_ip != null and .node_info.listen_addr != null) |
     "\(.node_info.id)@\(if .node_info.listen_addr | contains("0.0.0.0") then .remote_ip + ":" + (.node_info.listen_addr | sub("tcp://0.0.0.0:"; "")) else (.node_info.listen_addr | sub("tcp://"; "")) end)"' |
     paste -sd ',')
