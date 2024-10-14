@@ -80,28 +80,33 @@ while true; do
 
     echo "Current block height: $LATEST_BLOCK_HEIGHT"
 
-    # Check if current block has reached destination block
-    # Upgrade the node: v0.9.13 -> v0.10.1
-    if [ "$LATEST_BLOCK_HEIGHT" -ge 1 ]; then
-
-      # Check if the upgrade has already been performed
-      if check_if_upgrade_already_done 626575; then
-          echo "No need to perform the upgrade again."
-      else
-        echo "Block height $LATEST_BLOCK_HEIGHT has reached 1."
-        schedule_client_upgrade "$(get_aws_story_binary_url "0.10.0-9603826")" "v0.10.0" 626575
-      fi
-
-    # Upgrade the node: v0.10 -> v0.11.0
+    if [ "$LATEST_BLOCK_HEIGHT" -ge 990456 ]; then
+        # Upgrade the node: v0.10.1 -> v0.11.0
+        # Check if the upgrade has already been performed
+        if check_if_upgrade_already_done 1325860; then
+            echo "No need to perform the upgrade again."
+        else
+            echo "Block height $LATEST_BLOCK_HEIGHT has reached 990456."
+            schedule_client_upgrade "$(get_aws_story_binary_url "0.11.0-aac4bfe")" "v0.11.0" 1325860
+        fi
     elif [ "$LATEST_BLOCK_HEIGHT" -ge 626575 ]; then
-
-      # Check if the upgrade has already been performed
-      if check_if_upgrade_already_done 1325860; then
-          echo "No need to perform the upgrade again."
-      else
-        echo "Block height $LATEST_BLOCK_HEIGHT has reached 626575."
-        schedule_client_upgrade "$(get_aws_story_binary_url "0.11.0-aac4bfe")" "v0.11.0" 1325860
-      fi
+        # Upgrade the node: v0.10.0 -> v0.10.1
+        # Check if the upgrade has already been performed
+        if check_if_upgrade_already_done 990456; then
+            echo "No need to perform the upgrade again."
+        else
+            echo "Block height $LATEST_BLOCK_HEIGHT has reached 626575."
+            schedule_client_upgrade "$(get_aws_story_binary_url "0.10.1-57567e5")" "v0.10.1" 990456
+        fi
+    elif [ "$LATEST_BLOCK_HEIGHT" -ge 1 ]; then
+        # Upgrade the node: v0.9.13 -> v0.10.0
+        # Check if the upgrade has already been performed
+        if check_if_upgrade_already_done 626575; then
+            echo "No need to perform the upgrade again."
+        else
+            echo "Block height $LATEST_BLOCK_HEIGHT has reached 1."
+            schedule_client_upgrade "$(get_aws_story_binary_url "0.10.0-9603826")" "v0.10.0" 626575
+        fi
     fi
 
     sleep 5
